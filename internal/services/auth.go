@@ -19,10 +19,12 @@ const (
 )
 
 var (
-	ErrNoRegSession        = errors.New("session doesn't found with same fingerprint and time code")
-	ErrInvalidFingerPrint  = errors.New("invalid fingerprint")
-	ErrSessionNotConfirmed = errors.New("session not confirmed")
-	ErrInvalidUserID       = errors.New("invalid userID")
+	ErrNoRegSession         = errors.New("session doesn't found with same fingerprint and time code")
+	ErrInvalidFingerPrint   = errors.New("invalid fingerprint")
+	ErrSessionNotConfirmed  = errors.New("session not confirmed")
+	ErrInvalidUserID        = errors.New("invalid userID")
+	ErrRefreshTokenExp      = errors.New("refresh token expired")
+	ErrDifferentFingerPrint = errors.New("different fingerprint")
 )
 
 type AuthService struct {
@@ -72,11 +74,19 @@ func (s *AuthService) GetRegSession(ctx context.Context, fingerPrint, timeCode s
 		return "", ErrSessionNotConfirmed
 	}
 
-	userID := session.UserID
-	if userID == "" {
+	userTgId := session.UserID
+	if userTgId == "" {
 		return "", ErrInvalidUserID
 	}
-	return userID, nil
+	userID, err := strconv.ParseInt(userTgId, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("%s:%w", op, err)
+	}
+	userDTO, err := s.postgres.GetUserDTO(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("%s:%w", op, err)
+	}
+	return userDTO.Uuid, nil
 }
 
 func (s *AuthService) InitUser(ctx context.Context, userID, refreshToken, ip, fingerprint string) error {
@@ -94,4 +104,33 @@ func (s *AuthService) InitUser(ctx context.Context, userID, refreshToken, ip, fi
 		ip,
 		fingerprint,
 		refreshTokenExp)
+}
+
+func (s *AuthService) RefreshToken(ctx context.Context, refreshToken, fingerprint string) (models.UserDTO, error) {
+	const op = "services.RefreshToken"
+
+	session, err := s.postgres.GetSession(ctx, refreshToken)
+	if err != nil {
+		return models.UserDTO{}, fmt.Errorf("%s:%w", op, err)
+	}
+
+	if session.ExpiredAt.Before(time.Now()) {
+		return models.UserDTO{}, fmt.Errorf("%s:%w", op, ErrRefreshTokenExp)
+	}
+
+	if session.FingerPrint != fingerprint {
+		// todo may be delete session ?
+		return models.UserDTO{}, fmt.Errorf("%s:%w", op, ErrDifferentFingerPrint)
+	}
+
+	role, err := s.postgres.RoleUser(ctx, session.UserID)
+	if err != nil {
+		return models.UserDTO{}, fmt.Errorf("%s:%w", op, err)
+	}
+	// todo refresh token
+
+	return models.UserDTO{
+		Uuid: session.UserID,
+		Role: role,
+	}, nil
 }

@@ -24,11 +24,13 @@ func newErrorResponse(c *gin.Context, statusCode int, message string) {
 	c.AbortWithStatusJSON(statusCode, errorResponse{message})
 }
 
-func newErrorWsResponse(con *websocket.Conn, messageType int, message string) error {
+func newErrorWsResponse(con *websocket.Conn, statusCode int, message string) error {
 	const op = "response.newErrorWsResponse"
 
-	if err := con.WriteMessage(messageType, []byte(message)); err != nil {
-		return fmt.Errorf("%s:%s", op, fmt.Errorf("%w;%w", err, con.Close()))
+	closeErr := websocket.FormatCloseMessage(statusCode, message)
+
+	if err := con.WriteMessage(websocket.CloseMessage, closeErr); err != nil {
+		return fmt.Errorf("%s:%w", op, fmt.Errorf("%w;%v", err, con.Close()))
 	}
 
 	return con.Close()

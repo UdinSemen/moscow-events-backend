@@ -10,18 +10,18 @@ import (
 )
 
 const (
-	opPrefix          = "http-server.handlers.auth-middleware."
-	AuthHeader        = "Authorization"
-	UserCtx           = "userCtx"
-	okayAuth          = "user: %s success authed role: %s"
-	invalidAuth       = "user: %s invalid authed role: %s"
-	emptyAuthHeader   = "empty auth header"
-	invalidAuthHeader = "invalid auth header"
-	invalidToken      = "invalid access token"
+	opPrefixAuthMiddleware = "http-server.handlers.auth-middleware."
+	AuthHeader             = "Authorization"
+	UserCtx                = "userCtx"
+	okayAuth               = "user: %s success authed role: %s"
+	invalidAuth            = "user: %s invalid authed role: %s"
+	emptyAuthHeader        = "empty auth header"
+	invalidAuthHeader      = "invalid auth header"
+	invalidToken           = "invalid access token"
 )
 
 func (h *Handler) userIdentity(c *gin.Context) {
-	const op = opPrefix + "userIdentity"
+	const op = opPrefixAuthMiddleware + "userIdentity"
 
 	header := c.GetHeader(AuthHeader)
 	if header == "" {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	log_middlewares "github.com/UdinSemen/moscow-events-backend/internal/http-server/log-middlewares"
 	"github.com/UdinSemen/moscow-events-backend/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -13,22 +14,26 @@ import (
 )
 
 const (
-	internalErr = "smth wrong"
-	timeOutWs   = 75
-	errTimeout  = "timeout"
+	internalErr  = "smth wrong"
+	timeOutWs    = 3
+	errTimeout   = "timeout"
+	opPrefixAuth = "http-server.handlers."
 )
 
-var connUpgrade = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-}
+var (
+	connUpgrade = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+	ErrReqIdNotExist = errors.New("request id not exist")
+)
 
 type inputSignUp struct {
 	FingerPrint string `json:"finger_print" binding:"required"`
 }
 
 func (h *Handler) signUp(c *gin.Context) {
-	const op = "http-server.handlers.signUp"
+	const op = opPrefixAuth + "signUp"
 
 	zap.S().Info(c.RemoteIP())
 	var input inputSignUp
@@ -99,7 +104,12 @@ func (h *Handler) signIn(c *gin.Context) {
 }
 
 func (h *Handler) signInWebSocket(c *gin.Context) {
-	const op = "http-server.handlers.signInWebSocket"
+	const op = opPrefixAuth + "signInWebSocket"
+
+	reqId, ok := c.Get(log_middlewares.RequestIDCtx)
+	if !ok {
+		zap.S().Errorf("%s:%v", op, ErrReqIdNotExist)
+	}
 
 	con, err := connUpgrade.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -112,6 +122,14 @@ func (h *Handler) signInWebSocket(c *gin.Context) {
 	var input inputSignIn
 	if err := con.ReadJSON(&input); err != nil {
 		zap.S().Warn(fmt.Errorf("%s:%w", op, err))
+
+		if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+
+			zap.L().Warn("normal closure",
+				zap.Error(err),
+				zap.Any("req_id", reqId),
+			)
+		}
 		if err := newErrorWsResponse(con, websocket.CloseInternalServerErr, internalErr); err != nil {
 			zap.S().Error(fmt.Errorf("%s:%w", op, err))
 		}
@@ -122,9 +140,7 @@ func (h *Handler) signInWebSocket(c *gin.Context) {
 
 	userChanel := make(chan string)
 	go func() {
-		counter := 0
-		/* todo {"level":"error","timestamp":"2024-01-24T01:02:02.408+0300","caller":"handlers/auth.go:130","msg":"http-server.handlers.signInWebSocket:response.newErrorWsResponse:websocket: bad write message type;%!w(<nil>)","stacktrace":"github.com/UdinSemen/moscow-events-backend/internal/http-server/handlers.(*Handler).signInWebSocket.func1\n\t/Users/semen/Yandex.Disk.localized/goprojects/moscow-events-backend/internal/http-server/handlers/auth.go:130"}
-		 */
+		counter := 1
 		for {
 			zap.S().Debug(counter)
 			if counter > timeOutWs {
@@ -137,7 +153,14 @@ func (h *Handler) signInWebSocket(c *gin.Context) {
 			if err != nil {
 				counter++
 				if errors.Is(err, services.ErrSessionNotConfirmed) {
-					zap.S().Info(fmt.Errorf("%s:%w", op, err))
+					// todo
+					if counter == timeOutWs {
+						zap.L().Warn(op,
+							zap.Error(err),
+							zap.String("user_id", userID),
+							zap.Any("req_id", reqId),
+						)
+					}
 				} else {
 					zap.S().Warn(fmt.Errorf("%s:%w", op, err))
 					if err := newErrorWsResponse(con, websocket.CloseTryAgainLater, internalErr); err != nil {
@@ -176,10 +199,24 @@ func (h *Handler) signInWebSocket(c *gin.Context) {
 			zap.S().Error(fmt.Errorf("%s:%w", op, err))
 		}
 	}
-	con.Close()
+	zap.S().Error(fmt.Errorf("%s:%v", op, con.Close()))
+}
+
+type inputRefresh struct {
+	RefreshToken string `json:"refresh_token"`
+	FingerPrint  string `json:"finger_print"`
 }
 
 func (h *Handler) refresh(c *gin.Context) {
+	const op = opPrefixAuth + "refresh"
 
-	// todo implement me
+	var input inputRefresh
+	if err := c.BindJSON(&input); err != nil {
+		zap.S().Warn(fmt.Errorf("%s:%w", op, err))
+		newErrorResponse(c, http.StatusBadRequest, errBindingJSON.Error())
+		return
+	}
+
+	// todo refresh token
+
 }

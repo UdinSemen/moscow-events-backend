@@ -26,10 +26,11 @@ func RequestLogger(c *gin.Context) {
 	if err != nil {
 		zap.S().Errorf("%s:%v", op, err)
 	}
+	c.Set(RequestIDCtx, reqID)
 
 	// call next middleware in stack
 	c.Next()
-	c.Set(RequestIDCtx, reqID)
+
 	logger := zap.L().WithOptions(zap.WithCaller(false))
 
 	logger.Info(mes,
