@@ -1,5 +1,6 @@
 .idea
 /config/local.yaml
+/config/mob.yaml
 /config/dev.yaml
 .env
 docker-compose.yml

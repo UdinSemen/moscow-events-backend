@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/UdinSemen/moscow-events-backend/internal/config"
 	"github.com/jmoiron/sqlx"
@@ -33,7 +34,13 @@ func (s *PgStorage) Ping() error {
 	return s.db.Ping()
 }
 
-func (s *PgStorage) InitUser(ctx context.Context, userID int64, refreshToken string) error {
+func (s *PgStorage) InitUser(
+	ctx context.Context,
+	userID int64,
+	refreshToken,
+	ip,
+	fingerprint string,
+	expireAt time.Time) error {
 	const op = "pg_storage.InitUser"
 
 	tx, err := s.db.Begin()
@@ -49,7 +56,9 @@ func (s *PgStorage) InitUser(ctx context.Context, userID int64, refreshToken str
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-	_, err = tx.Exec("insert into sessions (user_id, refresh_token) values ($1, $2)", uuid, refreshToken)
+	_, err = tx.Exec("insert into sessions (user_id, refresh_token, ip, finger_print, exp_at) "+
+		"values ($1, $2, $3, $4, $5)",
+		uuid, refreshToken, ip, fingerprint, expireAt)
 	if err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("%s: %w", op, err)

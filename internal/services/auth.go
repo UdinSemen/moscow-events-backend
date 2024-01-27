@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/UdinSemen/moscow-events-backend/internal/domain/models"
 	"github.com/UdinSemen/moscow-events-backend/internal/storage"
 	"github.com/UdinSemen/moscow-events-backend/pkg/utils"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -24,8 +26,9 @@ var (
 )
 
 type AuthService struct {
-	redis    storage.Redis
-	postgres storage.PgStorage
+	refreshTokenTTL time.Duration
+	redis           storage.Redis
+	postgres        storage.PgStorage
 }
 
 func NewAuth(redis storage.Redis, postgres storage.PgStorage) *AuthService {
@@ -45,7 +48,11 @@ func (s *AuthService) GetRegSession(ctx context.Context, fingerPrint, timeCode s
 
 	val, err := s.redis.GetRegSession(ctx, timeCode)
 	if err != nil {
-		return "", fmt.Errorf("%s:%w", op, err)
+		if errors.Is(err, redis.Nil) {
+			return "", ErrNoRegSession
+		} else {
+			return "", fmt.Errorf("%s:%w", op, err)
+		}
 	}
 
 	if val == "" {
@@ -72,7 +79,7 @@ func (s *AuthService) GetRegSession(ctx context.Context, fingerPrint, timeCode s
 	return userID, nil
 }
 
-func (s *AuthService) InitUser(ctx context.Context, userID, refreshToken string) error {
+func (s *AuthService) InitUser(ctx context.Context, userID, refreshToken, ip, fingerprint string) error {
 	const op = "services.InitUser"
 
 	userIDInt, err := strconv.ParseInt(userID, 10, 64)
@@ -80,5 +87,11 @@ func (s *AuthService) InitUser(ctx context.Context, userID, refreshToken string)
 		return fmt.Errorf("%s:%w", op, err)
 	}
 
-	return s.postgres.InitUser(ctx, userIDInt, refreshToken)
+	refreshTokenExp := time.Now().Add(s.refreshTokenTTL)
+	return s.postgres.InitUser(ctx,
+		userIDInt,
+		refreshToken,
+		ip,
+		fingerprint,
+		refreshTokenExp)
 }

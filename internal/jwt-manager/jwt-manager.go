@@ -8,6 +8,7 @@ import (
 
 	"github.com/UdinSemen/moscow-events-backend/internal/domain/models"
 	"github.com/dgrijalva/jwt-go"
+	"go.uber.org/zap"
 )
 
 type TokenManager interface {
@@ -21,6 +22,12 @@ type Manager struct {
 	tokenTTL   time.Duration
 }
 
+type tokenClaims struct {
+	jwt.StandardClaims
+	Uuid string `json:"uuid"`
+	Role string `json:"role"`
+}
+
 func NewManager(signingKey string, tokenTTL *time.Duration) (*Manager, error) {
 	const op = "jwt-manager.NewManager"
 	if signingKey == "" {
@@ -30,14 +37,21 @@ func NewManager(signingKey string, tokenTTL *time.Duration) (*Manager, error) {
 		return nil, fmt.Errorf("%s:%w", op, errors.New("empty tokenTTL key"))
 	}
 
-	return &Manager{signingKey: signingKey}, nil
+	zap.S().Debug(tokenTTL)
+	return &Manager{
+		signingKey: signingKey,
+		tokenTTL:   *tokenTTL}, nil
 }
 
 func (m *Manager) GenerateToken(userID, role string) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.StandardClaims{
-		ExpiresAt: time.Now().Add(m.tokenTTL).Unix(),
-		Id:        userID,
-		Subject:   role,
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &tokenClaims{
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(m.tokenTTL).Unix(),
+			IssuedAt:  time.Now().Unix(),
+		},
+		Uuid: userID,
+		Role: role,
 	})
 
 	return token.SignedString([]byte(m.signingKey))
@@ -63,8 +77,8 @@ func (m *Manager) ParseToken(accessToken string) (models.UserDTO, error) {
 	}
 
 	return models.UserDTO{
-		UserID: claims["jti"].(string),
-		Role:   claims["sub"].(string),
+		Uuid: claims["uuid"].(string),
+		Role: claims["role"].(string),
 	}, nil
 }
 

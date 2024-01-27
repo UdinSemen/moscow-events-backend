@@ -24,7 +24,7 @@ type httpServer struct {
 
 type jwt struct {
 	SecretKey string        `yaml:"secret-key"`
-	TokenTTL  time.Duration `yaml:"token-ttl"`
+	TokenTTL  time.Duration `yaml:"tokenTTL"`
 }
 
 type postgres struct {

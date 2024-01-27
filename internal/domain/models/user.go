@@ -1,8 +1,8 @@
 package models
 
 type UserDTO struct {
-	UserID string `json:"user_id"`
-	Role   string `json:"role"`
+	Uuid string `json:"uuid"`
+	Role string `json:"role"`
 }
 
 type User struct {
