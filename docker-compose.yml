@@ -1,0 +1,64 @@
+version: '3.8'
+networks:
+  moscow_events:
+
+services:
+  redis:
+    restart: always
+    image: redis:alpine
+    container_name: 'redis-events'
+    hostname: 'redis'
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - ${REDIS_PORTS}
+    networks:
+      - moscow_events
+
+  postgres:
+    restart: always
+    image: postgres:14.8-alpine3.18
+    container_name: 'postgres-events'
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./sql/database_up/database_up.sql:/docker-entrypoint-initdb.d/database_up.sql
+    ports:
+      - ${POSTGRES_PORTS}
+    networks:
+      - moscow_events
+
+  tg-auth:
+    image: udinsemen/tg-auth:v1.0.0
+    container_name: 'tg_auth_moscow'
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      CONFIG_PATH: ${CONFIG_PATH_TG_BOT}
+    networks:
+      - moscow_events
+
+  moscow-events-backend:
+    image: udinsemen/moscow_events_backend:v1.0.0
+    container_name: 'moscow_events_backend'
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      CONFIG_PATH: ${CONFIG_PATH_TG_BOT}
+    ports:
+      - ${SERVER_PORT}
+    networks:
+      - moscow_events
+
+  nginx_moscow:
+    image: nginx
+    container_name: 'nginx_moscow_events'
+    ports:
+      - "8086:80"
+    networks:
+      - moscow_events
